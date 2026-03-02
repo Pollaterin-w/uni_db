@@ -119,21 +119,56 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION can_view_image(p_user_id INTEGER, p_image_id INTEGER)
-RETURN BOOLEAN AS $$
+RETURNS BOOLEAN AS $$
 DECLARE
+    v_can BOOLEAN;
 BEGIN
-	WHERE i.image_id = p_image_id
-		AND (
-        i.owner_id = p_user_id        
-        OR i.is_public = TRUE         
-     	    OR EXISTS (                  
-            SELECT 1 FROM shares
-            WHERE to_user_id = p_user_id
-                AND image_id = p_image_id
-      )
-  )
+    SELECT EXISTS(
+        SELECT 1
+        FROM images
+        WHERE images.image_id = p_image_id
+          AND (
+              images.owner_id = p_user_id
+              OR images.is_public = TRUE
+              OR EXISTS(
+                  SELECT 1 FROM shares
+                  WHERE shares.to_user_id = p_user_id
+                    AND shares.image_id = p_image_id
+              )
+          )
+    ) INTO v_can;
+
+    RETURN v_can;
 END;
 $$ LANGUAGE plpgsql;
 
+
+CREATE OR REPLACE FUNCTION get_accessible_images(p_user_id INTEGER)
+RETURNS TABLE (
+    image_id    INTEGER,
+    title       VARCHAR,
+    media_url   VARCHAR,
+    is_public   BOOLEAN,
+    owner_id    INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        images.image_id,
+        images.title,
+        images.media_url,
+        images.is_public,
+        images.owner_id
+    FROM images
+    WHERE
+        images.owner_id = p_user_id
+        OR images.is_public = TRUE
+        OR EXISTS (
+            SELECT 1 FROM shares
+            WHERE shares.to_user_id = p_user_id
+              AND shares.image_id = images.image_id
+        );
+END;
+$$ LANGUAGE plpgsql;
 
 
